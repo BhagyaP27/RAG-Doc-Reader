@@ -14,7 +14,7 @@ from typing import Generator
 
 import chromadb
 from chromadb.utils import embedding_functions
-from langchain_text_splitter import RecursiveCharacterTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
 #--- Config and Setup ---
@@ -43,3 +43,27 @@ Always cite the source file name when referencing specific information.
 
 #--- Chromadb Setup ---
 
+def _get_collection() -> chromadb.Collection:
+    """Lazily initialize and return the persistent ChromaDB
+    collection for storing document chunks and embeddings."""
+
+    global _collection
+    if _collection is None:
+        client = chromadb.PersistentClient(path=VECTOR_DB_PATH)
+        embed_fn = embedding_functions.OllamaEmbeddingFunction(
+            url=f"{OLLAMA_HOST}/api/embeddings",
+            model_name = EMBED_MODEL,
+        )
+
+        _collection - client.get_or_create_collection(
+            name = "documents",
+            embedding_function=embed_fn
+            metadata={"hnsw:space": "cosine"}, # cosine similarity scoring
+        )
+
+    return _collection
+
+
+#--- Document Processing/parsing ---
+
+def _parse_file(file_path: Path) -> Generator[str, None, None]:

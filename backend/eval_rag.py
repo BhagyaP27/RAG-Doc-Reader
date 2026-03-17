@@ -1,0 +1,2 @@
+"""
+generates the portfolio stat"""
