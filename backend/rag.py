@@ -185,3 +185,58 @@ def retrieve_context( query: str, top_k: int = TOP_K) -> list[dict]:
 
 #------ LLM providers abstraction layer - add more providers here as needed -------
 
+def _stream_ollama(system: str, user: str) -> Generator[str, None, None]:
+    """Stream tokens from a local Ollama model"""
+    import ollama as ol
+    client = ol.Client(host=OLLAMA_HOST)
+    for chunk in client.chat(
+        model=LLM_MODEL,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user", "content": user},
+        ],
+        stream=True, 
+    ):
+        token = chunk["message"]["content"]
+        if token:
+            yield token
+def _stream_openai(system: str, user: str) -> Generator[str, None, None]:
+    """Stream tokens from the OpenAI API (gpt-4o, gpt-3.5-turbo, etc.)"""
+    from openai import OpenAI
+    client = OpenAI(api_key=OPENAI_API_KEY)
+    with client.chat.completions.create(
+        model=LLM_MODEL,
+        messages=[
+            {"role": "system", "content": system},
+            {"role": "user",   "content": user},
+        ],
+        stream=True,
+    ) as stream:
+        for chunk in stream:
+            token = chunk.choices[0].delta.content or ""
+            if token:
+                yield token
+ 
+ 
+def _stream_anthropic(system: str, user: str) -> Generator[str, None, None]:
+    """Stream tokens from the Anthropic API (claude-sonnet-4-6, etc.)"""
+    import anthropic
+    client = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+    with client.messages.stream(
+        model=LLM_MODEL,
+        max_tokens=1024,
+        system=system,
+        messages=[{"role": "user", "content": user}],
+    ) as stream:
+        yield from stream.text_stream
+ 
+ 
+# Provider registry — switching providers is a one-line .env change
+_PROVIDERS = {
+    "ollama":    _stream_ollama,
+    "openai":    _stream_openai,
+    "anthropic": _stream_anthropic,
+}
+
+#--- Augemented generatiopn pipeline ---
+
