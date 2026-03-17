@@ -7,11 +7,14 @@ Supported providers (set LLM_PROVIDER in .env):
 
 """
 
+from curses import meta
+from math import dist
 import os
 import uuid
 from pathlib import Path
 from typing import Generator
 
+from annotated_types import doc
 import chromadb
 from chromadb.utils import embedding_functions
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -41,7 +44,9 @@ Always cite the source file name when referencing specific information.
 """
 
 
-#--- Chromadb Setup ---
+#--- Chromadb Setup  lazy singleton---
+
+_collection = None  # global variable to hold the ChromaDB collection instance
 
 def _get_collection() -> chromadb.Collection:
     """Lazily initialize and return the persistent ChromaDB
@@ -147,4 +152,36 @@ def ingest_document(file_path: Path, source_name: str) -> dict:
 
 
 #___ Retrieval (semantic search) ___
+
+def retrieve_context( query: str, top_k: int = TOP_K) -> list[dict]:
+    """
+    Embeds the query and retrieves the top-k most semantically similar chunks 
+    from chromadb using cosine similarity.
+
+    returns list of: {text, source, chunk_index, distance}
+    Lower distance = more relevant
+    """
+
+    results = _get_collection().query(
+        query_texts=[query],
+        n_results=top_k,
+        include=["documents", "metadatas", " distances"],
+    )
+
+    return [
+        {
+            "text": doc,
+            "source": meta.get("source", "unknown"),
+            "chunk_index": meta.get("chunk_index", 0),
+            "distance": round(dist, 4),
+        }
+        for doc,meta,dist in zip(
+            results["documents"][0],
+            results["metadatas"][0],
+            results["distances"][0],
+        )
+    ]
+
+
+#------ LLM providers abstraction layer - add more providers here as needed -------
 
