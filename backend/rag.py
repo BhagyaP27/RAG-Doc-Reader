@@ -240,3 +240,38 @@ _PROVIDERS = {
 
 #--- Augemented generatiopn pipeline ---
 
+def _build_prompt(query: str, context_chunks: list[dict]) -> str:
+    """
+    Builds the user message with the retrieved context injection.
+    """
+
+    context = "\n\n---\n\n".join(
+        f"Source: {c['source']}, chunk {c['chunk_index']}]\n{c['text']}"
+        for c in context_chunks
+    )
+    return f"{context}\n\nQuestion: {query}"
+
+def stream_answer(query: str) -> Generator[str, None, None]:
+    """
+    Full RAG query pipeline : streams LLM response tokens
+    1. Retrieve top-k relevant chunks from chromadb
+    2. Build the augmented prompt with retrieved context
+    3. Stream the configured LLM response tokens
+    """
+
+    chunks = retrieve_context(query)
+
+    if not chunks:
+        yield "No documents found in the vector store. Please upload some documents first."
+        return
+    
+    provider_fn = _PROVIDERS.get(LLM_PROVIDER)
+    if provider_fn is None:
+        raise ValueError(
+            f"Unknown LLM_PROVIDER '{LLM_PROVIDER}'."
+            f"Choose from: {list(_PROVIDERS.keys())}"
+        )
+    
+    yield from provider_fn(SYSTEM_PROMPT, _build_prompt(query, chunks))
+
+
