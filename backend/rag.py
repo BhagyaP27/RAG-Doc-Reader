@@ -275,3 +275,21 @@ def stream_answer(query: str) -> Generator[str, None, None]:
     yield from provider_fn(SYSTEM_PROMPT, _build_prompt(query, chunks))
 
 
+#--- Utility helpers ---
+
+def list_sources() -> list[str]:
+    """Returns a sorted, deduplicated list of all ingested source file names."""
+    results = _get_collection().get(include=["metadatas"])
+    return sorted({m.get("source", "unknown") for m in results["metadatas"]})
+ 
+ 
+def delete_source(source_name: str) -> int:
+    """
+    Deletes all chunks belonging to a source from ChromaDB.
+    Returns the number of chunks deleted.
+    """
+    col     = _get_collection()
+    results = col.get(where={"source": source_name}, include=["metadatas"])
+    if results["ids"]:
+        col.delete(ids=results["ids"])
+    return len(results["ids"])
