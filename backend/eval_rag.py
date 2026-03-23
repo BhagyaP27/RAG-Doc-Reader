@@ -102,3 +102,82 @@ def get_bare_answer(question: str) -> str:
  
     return "[unsupported provider]"
  
+
+ #-- Evaluation loop----
+
+def run_eval(questions: list[dict], verbose: bool = True) -> dict:
+    """
+    For each question:
+      1. Get the RAG answer + retrieved context
+      2. Get the bare LLM answer with no context
+      3. Score faithfulness of the RAG answer vs the retrieved chunks
+    """
+    results = []
+    total_rag = total_base = 0.0
+
+    for i,q in enumerate(questions,1):
+        question = q["question"]
+        print(f"\n{'='*60}")
+        print(f"Q{i}: {question}")
+        print("-" * 60)
+ 
+        # RAG answer
+        t0 = time.time()
+        chunks     = retrieve_context(question)
+        rag_answer = collect_stream(stream_answer(question))
+        rag_time   = round(time.time() - t0, 2)
+        f_rag      = score_faithfulness(rag_answer, chunks)
+        total_rag += f_rag
+ 
+        if verbose:
+            print(f"\n[WITH RAG — {rag_time}s — faithfulness: {f_rag}]")
+            print(rag_answer[:500] + ("…" if len(rag_answer) > 500 else ""))
+            if chunks:
+                print(f"  Top source: {chunks[0]['source']} (dist={chunks[0]['distance']})")
+ 
+        # Bare LLM baseline
+        t0        = time.time()
+        base_answer = get_bare_answer(question)
+        base_time   = round(time.time() - t0, 2)
+        f_base      = score_faithfulness(base_answer, chunks)
+        total_base += f_base
+ 
+        if verbose:
+            print(f"\n[WITHOUT RAG — {base_time}s — faithfulness: {f_base}]")
+            print(base_answer[:500] + ("…" if len(base_answer) > 500 else ""))
+ 
+        results.append({
+            "question":             question,
+            "rag_answer":           rag_answer,
+            "baseline_answer":      base_answer,
+            "faithfulness_rag":     f_rag,
+            "faithfulness_baseline": f_base,
+            "top_source":           chunks[0]["source"] if chunks else None,
+            "rag_latency_s":        rag_time,
+        })
+ 
+    n           = len(questions)
+    avg_rag     = round(total_rag / n, 3)
+    avg_base    = round(total_base / n, 3)
+    improvement = round(((avg_rag - avg_base) / max(avg_base, 0.001)) * 100, 1)
+ 
+    summary = {
+        "questions_evaluated":       n,
+        "avg_faithfulness_rag":      avg_rag,
+        "avg_faithfulness_baseline": avg_base,
+        "improvement_pct":           improvement,
+        "results":                   results,
+    }
+ 
+    print(f"\n{'='*60}")
+    print("EVAL SUMMARY")
+    print(f"  Questions:          {n}")
+    print(f"  RAG faithfulness:   {avg_rag}")
+    print(f"  Base faithfulness:  {avg_base}")
+    print(f"  Improvement:        +{improvement}%")
+    print(f"\n  PORTFOLIO STAT: RAG improved answer faithfulness by {improvement}%")
+    print(f"{'='*60}")
+ 
+    return summary
+
+
