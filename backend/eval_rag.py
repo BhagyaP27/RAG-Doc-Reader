@@ -180,4 +180,34 @@ def run_eval(questions: list[dict], verbose: bool = True) -> dict:
  
     return summary
 
+#--- Command-line interface----
 
+if __name__ == "__main__":
+    from dotenv import load_dotenv
+    load_dotenv()
+ 
+    parser = argparse.ArgumentParser(description="Evaluate RAG pipeline quality")
+    parser.add_argument("--doc",       help="Path to document to ingest before eval")
+    parser.add_argument("--questions", help="Path to JSON question file")
+    parser.add_argument("--output",    default="eval_results.json")
+    parser.add_argument("--quiet",     action="store_true")
+    args = parser.parse_args()
+ 
+    if args.doc:
+        p = Path(args.doc)
+        print(f"Ingesting {p.name} ...")
+        r = ingest_document(p, source_name=p.name)
+        print(f"  → {r['chunks']} chunks stored\n")
+ 
+    questions = DEFAULT_QUESTIONS
+    if args.questions:
+        with open(args.questions) as f:
+            questions = json.load(f)
+ 
+    summary = run_eval(questions, verbose=not args.quiet)
+ 
+    with open(args.output, "w") as f:
+        json.dump(summary, f, indent=2)
+ 
+    print(f"\nFull results saved to {args.output}")
+ 
