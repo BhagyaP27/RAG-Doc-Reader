@@ -1,0 +1,39 @@
+#  Python virtual environment 
+venv/
+.venv/
+env/
+ENV/
+
+# Python cache 
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+#  Environment / secrets 
+.env
+.env.local
+
+#  ChromaDB vector store — this is local data, don't commit it 
+vector_store/
+
+# Eval output files
+eval_results.json
+*.json
+
+# Uploaded documents (temp files) 
+uploads/
+tmp/
+
+#  Distribution / packaging 
+dist/
+build/
+*.egg-info/
+.eggs/
+
+#  Testing 
+.coverage
+htmlcov/
