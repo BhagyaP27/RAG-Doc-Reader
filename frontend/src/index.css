@@ -1,0 +1,42 @@
+/* 
+   CSS VARIABLES FOR THE BLUE PALETTE
+   These five variables match the five swatches in the design brief.
+   They're defined here so you can reference them anywhere (e.g. future
+   components) without importing a JS theme object.
+ */
+:root {
+  --navy:       #0d2347;   /* darkest  — sidebar bg, dark text         */
+  --royal:      #0d3d7c;   /* dark     — headers, active rows          */
+  --blue:       #1565c0;   /* medium   — buttons, accents              */
+  --steel:      #5b8db8;   /* muted    — borders, secondary elements   */
+  --pale:       #aecde0;   /* lightest — page bg, light surfaces       */
+}
+
+/* SMOOTH TRANSITIONS ON ROOT
+   Applying transition to the html element means background colour changes
+   (triggered by the theme toggle in App.jsx) animate smoothly.
+ */
+html {
+  transition: background .25s;
+}
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+input, button, textarea, select {
+  font-family: inherit;
+}
+
+/* Thin scrollbars — steel blue in light mode, dark navy in dark */
+::-webkit-scrollbar       { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--steel); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--blue); }
