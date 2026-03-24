@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Generator
 
 import chromadb
-from chromadb.utils import embedding_functions
+from chromadb.utils.embedding_functions import OllamaEmbeddingFunction
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 
@@ -60,7 +60,7 @@ def _get_collection() -> chromadb.Collection:
     global _collection
     if _collection is None:
         client = chromadb.PersistentClient(path=VECTOR_DB_PATH)
-        embed_fn = embedding_functions.OllamaEmbeddingFunction(
+        embed_fn = OllamaEmbeddingFunction(
             url=f"{OLLAMA_HOST}/api/embeddings",
             model_name=EMBED_MODEL,
         )
