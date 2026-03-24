@@ -1,10 +1,137 @@
-import { useState, useEffect, useRef} from 'react'
-
-// All API calls go through /api which is a Vite proxy to http://localhost:8000
+import { useState, useEffect, useRef } from 'react'
 
 const API = '/api'
 
+
+// Palette (light mode):
+//   #0d2347 — dark navy      → sidebar bg, dark text
+//   #0d3d7c — royal blue     → sidebar header, active rows
+//   #1565c0 — medium blue    → buttons, accents, links
+//   #5b8db8 — steel blue     → borders, muted elements
+//   #aecde0 — pale blue      → page background, light surfaces
+const THEMES = {
+  light: {
+    // Page & main area
+    pageBg:          '#aecde0',   // pale blue — entire page background
+    mainBg:          '#ddeef7',   // slightly lighter — answer area
+    cardBg:          '#ffffff',   // white — answer box, input bar
+    inputBg:         '#ffffff',
+
+    // Sidebar
+    sidebarBg:       '#0d2347',   // dark navy
+    sidebarBorder:   '#0d3d7c',   // royal blue divider
+    sidebarTitle:    '#ffffff',
+    sidebarSub:      '#aecde0',   // pale blue subtitle
+    sidebarLabel:    '#5b8db8',   // steel blue section labels
+    sidebarEmpty:    '#5b8db8',
+
+    // Source rows in sidebar
+    sourceRowBg:     '#0d3d7c',   // royal blue row bg
+    sourceRowHover:  '#1565c0',   // medium blue on hover
+    sourceRowText:   '#ffffff',
+    deleteBtn:       '#aecde0',
+
+    // Upload zone
+    uploadBorder:    '#5b8db8',
+    uploadBorderHover:'#aecde0',
+    uploadText:      '#aecde0',
+    uploadStrong:    '#ffffff',
+
+    // Refresh button
+    refreshColor:    '#aecde0',
+
+    // Button (Ask)
+    btnBg:           '#1565c0',   // medium blue
+    btnBgDisabled:   '#5b8db8',   // steel blue when disabled
+    btnText:         '#ffffff',
+
+    // Input field
+    inputBorder:     '#5b8db8',
+    inputBorderFocus:'#1565c0',
+    inputText:       '#0d2347',
+    inputPlaceholder:'#5b8db8',
+
+    // Answer box
+    answerBorder:    '#5b8db8',
+    answerText:      '#0d2347',
+
+    // Top border between areas
+    divider:         '#5b8db8',
+
+    // Placeholder state
+    placeholderText: '#5b8db8',
+
+    // Error banner
+    errorBg:         '#fee2e2',
+    errorBorder:     '#fecaca',
+    errorText:       '#991b1b',
+
+    // Theme toggle button
+    toggleBg:        '#0d3d7c',
+    toggleText:      '#ffffff',
+    toggleBorder:    '#1565c0',
+  },
+
+  dark: {
+    pageBg:          '#060f1a',
+    mainBg:          '#0a1628',
+    cardBg:          '#0d2040',
+    inputBg:         '#0d2040',
+
+    sidebarBg:       '#040d17',
+    sidebarBorder:   '#0d2347',
+    sidebarTitle:    '#e8f4fd',
+    sidebarSub:      '#5b8db8',
+    sidebarLabel:    '#5b8db8',
+    sidebarEmpty:    '#2a4a6b',
+
+    sourceRowBg:     '#0d2347',
+    sourceRowHover:  '#0d3d7c',
+    sourceRowText:   '#aecde0',
+    deleteBtn:       '#5b8db8',
+
+    uploadBorder:    '#0d3d7c',
+    uploadBorderHover:'#1565c0',
+    uploadText:      '#5b8db8',
+    uploadStrong:    '#aecde0',
+
+    refreshColor:    '#5b8db8',
+
+    btnBg:           '#1565c0',
+    btnBgDisabled:   '#0d3d7c',
+    btnText:         '#ffffff',
+
+    inputBorder:     '#0d3d7c',
+    inputBorderFocus:'#1565c0',
+    inputText:       '#e8f4fd',
+    inputPlaceholder:'#2a4a6b',
+
+    answerBorder:    '#0d3d7c',
+    answerText:      '#e8f4fd',
+
+    divider:         '#0d2347',
+
+    placeholderText: '#2a4a6b',
+
+    errorBg:         '#2d0f0f',
+    errorBorder:     '#7f1d1d',
+    errorText:       '#fca5a5',
+
+    toggleBg:        '#0d3d7c',
+    toggleText:      '#aecde0',
+    toggleBorder:    '#1565c0',
+  },
+}
+
 export default function App() {
+  //  — THEME STATE
+  // Added `theme` state. Reads from localStorage so the preference persists
+  // across page refreshes. Defaults to 'light'.
+ const [theme, setTheme] = useState(
+    () => localStorage.getItem('rag-theme') || 'light'
+  )
+  const t = THEMES[theme]   // shorthand — use t.btnBg etc. throughout
+
   const [sources, setSources]     = useState([])
   const [question, setQuestion]   = useState('')
   const [answer, setAnswer]       = useState('')
@@ -12,135 +139,99 @@ export default function App() {
   const [uploading, setUploading] = useState(false)
   const [error, setError]         = useState('')
   const answerRef = useRef(null)
- 
-  // Load the list of indexed documents on first render
-  useEffect(() => {
-    loadSources()
-  }, [])
 
-  //Auto scroll the answer box as the token streams through
-    useEffect(() => {
-    if (answerRef.current) {
+  useEffect(() => { loadSources() }, [])
+
+  useEffect(() => {
+    if (answerRef.current)
       answerRef.current.scrollTop = answerRef.current.scrollHeight
-    }
   }, [answer])
 
-   useEffect(() => {
+ //  PERSIST THEME TO LOCALSTORAGE
+  // Every time theme changes, save it and update the <html> background so
+  // there's no white flash before React renders.
+  useEffect(() => {
     localStorage.setItem('rag-theme', theme)
     document.documentElement.style.background = THEMES[theme].pageBg
   }, [theme])
- 
+
   function toggleTheme() {
     setTheme(prev => prev === 'light' ? 'dark' : 'light')
   }
 
-  // -- API helpers --
-   
+  // ── API helpers (unchanged logic, colour-independent) ────────────────────
+
   async function loadSources() {
-    try{
-      const res = await fetch(`${API}/sources`)
+    try {
+      const res  = await fetch(`${API}/sources`)
       const data = await res.json()
       setSources(data.sources || [])
     } catch (err) {
-      console.error('Error loading sources:', err)
+      console.error('Failed to load sources:', err)
     }
-
   }
 
-
-  async function uploadFile(e){
+  async function uploadFile(e) {
     const file = e.target.files[0]
     if (!file) return
-
     setUploading(true)
     setError('')
-
     const form = new FormData()
     form.append('file', file)
-
     try {
-      const res = await fetch('${API}/ingest', {method:'POST', body: form})
-
-      if (!res.ok) {
-        const err = await res.json()
-        throw new Error(err.detail || 'Upload failed')
-
-      }
-
+      const res = await fetch(`${API}/ingest`, { method: 'POST', body: form })
+      if (!res.ok) { const err = await res.json(); throw new Error(err.detail) }
       const data = await res.json()
-      alert(' Ingested "${data.source}"\n${data.chunks} chunks stored')
+      alert(`✓ Ingested "${data.source}" — ${data.chunks} chunks`)
       loadSources()
-    }catch (err) {
-      console.error('Upload error:', err)
-      setError(err.message)
-    }
-
+    } catch (err) { setError(err.message) }
     setUploading(false)
-    e.target.value = '' // reset file input so the same file can be uploaded again if needed
+    e.target.value = ''
   }
 
   async function askQuestion() {
     if (!question.trim() || streaming) return
- 
-    setStreaming(true)
-    setAnswer('')
-    setError('')
- 
+    setStreaming(true); setAnswer(''); setError('')
     try {
       const res = await fetch(`${API}/query`, {
-        method:  'POST',
+        method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body:    JSON.stringify({ question }),
+        body: JSON.stringify({ question }),
       })
- 
-      if (!res.ok) {
-        const err = await res.json()
-        throw new Error(err.detail || `Query failed (${res.status})`)
-      }
- 
-      // Read the Server-Sent Events stream token by token
+      if (!res.ok) { const err = await res.json(); throw new Error(err.detail) }
       const reader  = res.body.getReader()
       const decoder = new TextDecoder()
- 
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
- 
-        const chunk = decoder.decode(value)
- 
-        // Each SSE message is: "data: <token>\n\n"
-        for (const line of chunk.split('\n\n')) {
+        for (const line of decoder.decode(value).split('\n\n')) {
           if (!line.startsWith('data: ')) continue
- 
-          const token = line.slice(6) // strip "data: " prefix
+          const token = line.slice(6)
           if (token === '[DONE]') break
- 
-          // Unescape <br> that the backend used to encode newlines
           setAnswer(prev => prev + token.replace(/<br>/g, '\n'))
         }
       }
-    } catch (err) {
-      setError(err.message)
-    }
- 
+    } catch (err) { setError(err.message) }
     setStreaming(false)
   }
- 
+
   async function deleteSource(name) {
-    if (!confirm(`Remove "${name}" from the vector store?`)) return
+    if (!confirm(`Remove "${name}"?`)) return
     try {
       await fetch(`${API}/sources/${encodeURIComponent(name)}`, { method: 'DELETE' })
       loadSources()
-    } catch (err) {
-      setError(err.message)
-    }
+    } catch (err) { setError(err.message) }
   }
 
-  // -- render -----
+  //  Render 
 
-  return(  <div style={{ display:'flex', height:'100vh', overflow:'hidden', background: t.pageBg, transition:'background .25s' }}>
- 
-      {/* --- Sidebar --- */}
+  return (
+    // ALL HARDCODED COLOURS REPLACED WITH t.* THEME VALUES
+    // Every style property that was a hex string is now a reference to the
+    // active theme object. Toggling theme re-renders with the new palette.
+    <div style={{ display:'flex', height:'100vh', overflow:'hidden', background: t.pageBg, transition:'background .25s' }}>
+
+      {/*  Sidebar  */}
       <aside style={{
         width: 268, minWidth: 268,
         borderRight: `1px solid ${t.sidebarBorder}`,
@@ -150,7 +241,7 @@ export default function App() {
         overflow: 'hidden',
         transition: 'background .25s',
       }}>
- 
+
         {/* Brand + theme toggle */}
         <div style={{ paddingBottom: 16, borderBottom: `1px solid ${t.sidebarBorder}` }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'flex-start' }}>
@@ -162,8 +253,11 @@ export default function App() {
                 Ollama + ChromaDB
               </p>
             </div>
- 
-            {/* Theme toggle button */}
+
+            {/*THEME TOGGLE BUTTON
+                New button in the sidebar header. Switches between light/dark
+                and shows a sun/moon icon matching the current mode.
+            */}
             <button
               onClick={toggleTheme}
               title={`Switch to ${theme === 'light' ? 'dark' : 'light'} mode`}
@@ -183,7 +277,7 @@ export default function App() {
             </button>
           </div>
         </div>
- 
+
         {/* Upload */}
         <div>
           <p style={{ fontSize:10, fontWeight:700, color: t.sidebarLabel, letterSpacing:0.8, margin:'0 0 8px' }}>
@@ -214,7 +308,7 @@ export default function App() {
               onChange={uploadFile} disabled={uploading} style={{ display:'none' }} />
           </label>
         </div>
- 
+
         {/* Source list */}
         <div style={{ flex:1, overflow:'hidden', display:'flex', flexDirection:'column' }}>
           <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:8 }}>
@@ -228,7 +322,7 @@ export default function App() {
               refresh
             </button>
           </div>
- 
+
           <div style={{ flex:1, overflowY:'auto', display:'flex', flexDirection:'column', gap:4 }}>
             {sources.length === 0
               ? <p style={{ fontSize:12, color: t.sidebarEmpty, textAlign:'center', padding:'14px 0', margin:0 }}>
@@ -259,12 +353,12 @@ export default function App() {
             }
           </div>
         </div>
- 
+
       </aside>
- 
-      {/*--- Main area ----*/}
+
+      {/*  Main area  */}
       <main style={{ flex:1, display:'flex', flexDirection:'column', overflow:'hidden', background: t.mainBg, transition:'background .25s' }}>
- 
+
         {/* Error banner */}
         {error && (
           <div style={{
@@ -281,7 +375,7 @@ export default function App() {
             </button>
           </div>
         )}
- 
+
         {/* Answer area */}
         <div ref={answerRef} style={{ flex:1, padding:'28px 32px', overflowY:'auto' }}>
           {answer ? (
@@ -312,7 +406,7 @@ export default function App() {
             </div>
           )}
         </div>
- 
+
         {/* Input bar */}
         <div style={{
           borderTop: `1px solid ${t.divider}`,
@@ -356,124 +450,8 @@ export default function App() {
             {streaming ? 'Thinking...' : 'Ask'}
           </button>
         </div>
- 
+
       </main>
     </div>
   )
-
-}
-
-// --- Styling ---
-const THEMES = {
-  light: {
-    // Page & main area
-    pageBg:          '#aecde0',   // pale blue — entire page background
-    mainBg:          '#ddeef7',   // slightly lighter — answer area
-    cardBg:          '#ffffff',   // white — answer box, input bar
-    inputBg:         '#ffffff',
- 
-    // Sidebar
-    sidebarBg:       '#0d2347',   // dark navy
-    sidebarBorder:   '#0d3d7c',   // royal blue divider
-    sidebarTitle:    '#ffffff',
-    sidebarSub:      '#aecde0',   // pale blue subtitle
-    sidebarLabel:    '#5b8db8',   // steel blue section labels
-    sidebarEmpty:    '#5b8db8',
- 
-    // Source rows in sidebar
-    sourceRowBg:     '#0d3d7c',   // royal blue row bg
-    sourceRowHover:  '#1565c0',   // medium blue on hover
-    sourceRowText:   '#ffffff',
-    deleteBtn:       '#aecde0',
- 
-    // Upload zone
-    uploadBorder:    '#5b8db8',
-    uploadBorderHover:'#aecde0',
-    uploadText:      '#aecde0',
-    uploadStrong:    '#ffffff',
- 
-    // Refresh button
-    refreshColor:    '#aecde0',
- 
-    // Button (Ask)
-    btnBg:           '#1565c0',   // medium blue
-    btnBgDisabled:   '#5b8db8',   // steel blue when disabled
-    btnText:         '#ffffff',
- 
-    // Input field
-    inputBorder:     '#5b8db8',
-    inputBorderFocus:'#1565c0',
-    inputText:       '#0d2347',
-    inputPlaceholder:'#5b8db8',
- 
-    // Answer box
-    answerBorder:    '#5b8db8',
-    answerText:      '#0d2347',
- 
-    // Top border between areas
-    divider:         '#5b8db8',
- 
-    // Placeholder state
-    placeholderText: '#5b8db8',
- 
-    // Error banner
-    errorBg:         '#fee2e2',
-    errorBorder:     '#fecaca',
-    errorText:       '#991b1b',
- 
-    // Theme toggle button
-    toggleBg:        '#0d3d7c',
-    toggleText:      '#ffffff',
-    toggleBorder:    '#1565c0',
-  },
- 
-  dark: {
-    pageBg:          '#060f1a',
-    mainBg:          '#0a1628',
-    cardBg:          '#0d2040',
-    inputBg:         '#0d2040',
- 
-    sidebarBg:       '#040d17',
-    sidebarBorder:   '#0d2347',
-    sidebarTitle:    '#e8f4fd',
-    sidebarSub:      '#5b8db8',
-    sidebarLabel:    '#5b8db8',
-    sidebarEmpty:    '#2a4a6b',
- 
-    sourceRowBg:     '#0d2347',
-    sourceRowHover:  '#0d3d7c',
-    sourceRowText:   '#aecde0',
-    deleteBtn:       '#5b8db8',
- 
-    uploadBorder:    '#0d3d7c',
-    uploadBorderHover:'#1565c0',
-    uploadText:      '#5b8db8',
-    uploadStrong:    '#aecde0',
- 
-    refreshColor:    '#5b8db8',
- 
-    btnBg:           '#1565c0',
-    btnBgDisabled:   '#0d3d7c',
-    btnText:         '#ffffff',
- 
-    inputBorder:     '#0d3d7c',
-    inputBorderFocus:'#1565c0',
-    inputText:       '#e8f4fd',
-    inputPlaceholder:'#2a4a6b',
- 
-    answerBorder:    '#0d3d7c',
-    answerText:      '#e8f4fd',
- 
-    divider:         '#0d2347',
- 
-    placeholderText: '#2a4a6b',
- 
-    errorBg:         '#2d0f0f',
-    errorBorder:     '#7f1d1d',
-    errorText:       '#fca5a5',
- 
-    toggleBg:        '#0d3d7c',
-    toggleText:      '#aecde0',
-    toggleBorder:    '#1565c0',
-  },
 }
