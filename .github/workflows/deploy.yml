@@ -1,0 +1,114 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  id-token: write   # Required for OIDC no long-lived AWS keys stored in GitHub
+  contents: read
+
+env:
+  AWS_REGION: us-east-1
+
+jobs:
+  #Job 1 Deploy frontend to S3
+  deploy-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - run: npm ci
+        working-directory: frontend
+
+      # Set the prod API URL so React points at your ECS backend
+      - name: Build frontend for production
+        run: npm run build
+        working-directory: frontend
+        env:
+          VITE_API_URL: ${{ secrets.PROD_API_URL }}
+
+      - name: Configure AWS credentials (OIDC — no stored keys)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      # Sync built files to S3, then bust CloudFront cache
+      - name: Deploy to S3
+        run: |
+          aws s3 sync frontend/dist/ s3://${{ secrets.FRONTEND_BUCKET }} \
+            --delete \
+            --cache-control "public,max-age=31536000,immutable"
+          # index.html should never be cached aggressively
+          aws s3 cp frontend/dist/index.html s3://${{ secrets.FRONTEND_BUCKET }}/index.html \
+            --cache-control "no-cache"
+
+      - name: Invalidate CloudFront cache
+        run: |
+          aws cloudfront create-invalidation \
+            --distribution-id ${{ secrets.CLOUDFRONT_DIST_ID }} \
+            --paths "/*"
+
+  # Job 2 Build & push backend Docker image 
+  deploy-backend:
+    runs-on: ubuntu-latest
+    outputs:
+      image: ${{ steps.build.outputs.image }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push image
+        id: build
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          IMAGE_TAG: ${{ github.sha }}
+        run: |
+          docker build -t $ECR_REGISTRY/rag-doc-reader:$IMAGE_TAG .
+          docker push $ECR_REGISTRY/rag-doc-reader:$IMAGE_TAG
+          echo "image=$ECR_REGISTRY/rag-doc-reader:$IMAGE_TAG" >> $GITHUB_OUTPUT
+
+  # Job 3Terraform — update ECS to use the new image 
+  terraform:
+    needs: deploy-backend
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.0
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_DEPLOY_ROLE_ARN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Terraform init
+        run: terraform init
+        working-directory: infra/
+
+      - name: Terraform plan
+        run: terraform plan -var="image_tag=${{ github.sha }}"
+        working-directory: infra/
+
+      - name: Terraform apply
+        run: terraform apply -auto-approve -var="image_tag=${{ github.sha }}"
+        working-directory: infra/
