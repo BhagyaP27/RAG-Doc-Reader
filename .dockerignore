@@ -1,0 +1,25 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.venv/
+*.egg-info/
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# Infra — never in the image
+infra/
+.github/
+
+# Secrets
+.env
+.env.*
+
+# Dev tools
+.git/
+.gitignore
+README.md
+*.md
