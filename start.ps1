@@ -14,7 +14,7 @@ param(
 )
 
 Set-StrictMode -Version Latest
-$ErrorActionPreference = "Stop"
+$ErrorActionPreference = "Continue"
 
 # == Ports =====================================================================
 $BACKEND_PORT  = 8000
@@ -133,7 +133,9 @@ $VenvPip    = Join-Path $VenvDir  "Scripts\pip.exe"
 
 if (-not (Test-Path $VenvDir)) {
     Log "Creating venv..."
-    & python -m venv $VenvDir
+    $Py313 = "C:\Users\bhagy\AppData\Local\Programs\Python\Python313\python.exe"
+    if (-not (Test-Path $Py313)) { $Py313 = "python" }
+    & $Py313 -m venv $VenvDir
     if ($LASTEXITCODE -ne 0) { Err "python -m venv failed"; exit 1 }
 }
 Ok "venv ready"
@@ -198,15 +200,19 @@ $BackendDir = Join-Path $RepoRoot "backend"
 $BackendJob = Start-Job -ScriptBlock {
     param($python, $dir, $log)
     Set-Location $dir
-    & $python main.py 2>&1 | Out-File $log -Encoding utf8
+    # Isolate streams from PowerShell using cmd /c
+    cmd /c "`"$python`" main.py > `"$log`" 2>&1"
 } -ArgumentList $VenvPython, $BackendDir, $BackendLog
+
+Start-Sleep -Seconds 3
 
 # Wait up to 15 s for the health endpoint
 $healthy = $false
 for ($i = 1; $i -le 15; $i++) {
     Start-Sleep -Seconds 1
     try {
-        $resp = Invoke-WebRequest -Uri "http://localhost:$BACKEND_PORT/health" `
+        # Using 127.0.0.1 forces Windows to use the IPv4 loopback directly
+        $resp = Invoke-WebRequest -Uri "http://127.0.0.1:${BACKEND_PORT}/health" `
                                   -UseBasicParsing -TimeoutSec 2 -ErrorAction Stop
         if ($resp.StatusCode -eq 200) { $healthy = $true; break }
     } catch { <# not up yet #> }
@@ -219,7 +225,6 @@ if (-not $healthy) {
 }
 Ok "Backend healthy"
 Write-Host ""
-
 # == 7. Start frontend =========================================================
 Log "Starting Vite dev server on :$FRONTEND_PORT..."
 
@@ -263,13 +268,27 @@ Hr
 
 # == 10. Keep alive -- stream job output so logs appear in the terminal =========
 try {
+    $LastBackendLine  = 0
+    $LastFrontendLine = 0
+
     while ($true) {
-        # Show any new backend output so errors surface without opening a log file
-        Receive-Job $BackendJob  -ErrorAction SilentlyContinue |
-            ForEach-Object { Write-Host "[backend]  $_" -ForegroundColor DarkGray }
-        Receive-Job $FrontendJob -ErrorAction SilentlyContinue |
-            ForEach-Object { Write-Host "[frontend] $_" -ForegroundColor DarkGray }
-        Start-Sleep -Seconds 2
+        if (Test-Path $BackendLog) {
+            $bLines = Get-Content $BackendLog -ErrorAction SilentlyContinue
+            if ($bLines.Count -gt $LastBackendLine) {
+                $bLines[$LastBackendLine..($bLines.Count-1)] | ForEach-Object { Write-Host "[backend]  $_" -ForegroundColor DarkGray }
+                $LastBackendLine = $bLines.Count
+            }
+        }
+
+        if (Test-Path $FrontendLog) {
+            $fLines = Get-Content $FrontendLog -ErrorAction SilentlyContinue
+            if ($fLines.Count -gt $LastFrontendLine) {
+                $fLines[$LastFrontendLine..($fLines.Count-1)] | ForEach-Object { Write-Host "[frontend] $_" -ForegroundColor DarkGray }
+                $LastFrontendLine = $fLines.Count
+            }
+        }
+
+        Start-Sleep -Seconds 1
     }
 } finally {
     Cleanup

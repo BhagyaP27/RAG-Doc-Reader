@@ -5,7 +5,7 @@ pypdf==4.2.0
 python-docx==1.1.2
 markdown==3.6
 faiss-cpu==1.13.1
-numpy==1.26.4
+numpy>=2.0
 sentence-transformers==3.0.1
 ollama==0.2.1
 python-dotenv==1.0.1
