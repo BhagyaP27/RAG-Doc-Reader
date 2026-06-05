@@ -122,7 +122,7 @@ def _parse_file(file_path: Path) -> str:
         return "\n".join(page.extract_text() or "" for page in reader.pages)
 
     if suffix == ".docx":
-        from docx import Document
+        from docx import Document 
         doc = Document(str(file_path))
         return "\n".join(p.text for p in doc.paragraphs)
 
